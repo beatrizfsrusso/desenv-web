@@ -1,0 +1,29 @@
+# Build output
+target/
+*.class
+*.war
+*.jar
+
+# macOS
+.DS_Store
+._*
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+nbproject/
+
+# Logs
+*.log
+logs/
+
+# Local overrides / secrets
+.env
+.env.*
+*.local.properties

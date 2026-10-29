@@ -1,28 +1,33 @@
 package com.fysikos.controller;
 
+import com.fysikos.dao.CategoriaDAO;
 import com.fysikos.dao.ProdutoDAO;
 import com.fysikos.model.Produto;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.fysikos.util.CorpoInvalidoException;
+import com.fysikos.util.CorpoJson;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * Catalogo de produtos. A leitura e publica (o front lista sem exigir login);
+ * criar, alterar e remover sao restritos a administradores pelo
+ * AutenticacaoFilter.
+ *
+ *   GET /api/produtos?busca=...&categoriaId=...
+ */
 @WebServlet("/api/produtos/*")
 public class ProdutoServlet extends HttpServlet {
 
     private final ProdutoDAO produtoDAO = new ProdutoDAO();
-    private final Gson gson = new Gson();
+    private final CategoriaDAO categoriaDAO = new CategoriaDAO();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        resp.setContentType("application/json");
         String path = req.getPathInfo();
 
         if (path == null || path.equals("/")) {
@@ -30,90 +35,150 @@ public class ProdutoServlet extends HttpServlet {
             String categoriaId = req.getParameter("categoriaId");
 
             List<Produto> produtos;
-            if (busca != null) {
-                produtos = produtoDAO.buscarPorNome(busca);
-            } else if (categoriaId != null) {
-                produtos = produtoDAO.obterPorCategoria(Integer.parseInt(categoriaId));
-            } else {
-                produtos = produtoDAO.obterTodos();
+            try {
+                if (busca != null && !busca.isBlank()) {
+                    produtos = produtoDAO.buscarPorNome(busca.trim());
+                } else if (categoriaId != null && !categoriaId.isBlank()) {
+                    produtos = produtoDAO.obterPorCategoria(Integer.parseInt(categoriaId));
+                } else {
+                    produtos = produtoDAO.obterTodos();
+                }
+            } catch (NumberFormatException e) {
+                Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, "categoriaId deve ser um numero inteiro");
+                return;
             }
 
-            resp.getWriter().write(gson.toJson(produtos));
+            Resposta.ok(resp, produtos);
             return;
         }
 
-        int id = Integer.parseInt(path.substring(1));
+        Integer id = idDaRota(path);
+        if (id == null) {
+            Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, "Identificador invalido na URL");
+            return;
+        }
+
         Produto produto = produtoDAO.obterPorId(id);
-
         if (produto == null) {
-            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            Resposta.erroNaoEncontrado(resp, "Produto nao encontrado");
             return;
         }
-        resp.getWriter().write(gson.toJson(produto));
+        Resposta.ok(resp, produto);
     }
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        JsonObject body;
-        try (Reader reader = req.getReader()) {
-            body = gson.fromJson(reader, JsonObject.class);
+        try {
+            CorpoJson corpo = CorpoJson.ler(req);
+
+            Produto produto = new Produto();
+            produto.setCategoriaId(corpo.inteiroObrigatorio("categoriaId"));
+            produto.setNome(corpo.textoObrigatorio("nome"));
+            produto.setDescricao(corpo.textoObrigatorio("descricao"));
+            produto.setPreco(corpo.decimalObrigatorio("preco"));
+            produto.setQuantidadeEstoque(corpo.inteiroObrigatorio("quantidadeEstoque"));
+            produto.setAtivo(corpo.booleano("ativo", true));
+
+            String erro = validar(produto);
+            if (erro != null) {
+                Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, erro);
+                return;
+            }
+
+            produtoDAO.inserir(produto);
+            Resposta.criado(resp, produto);
+
+        } catch (CorpoInvalidoException e) {
+            Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         }
-
-        Produto produto = new Produto();
-        produto.setCategoriaId(body.get("categoriaId").getAsInt());
-        produto.setNome(body.get("nome").getAsString());
-        produto.setDescricao(body.get("descricao").getAsString());
-        produto.setPreco(new BigDecimal(body.get("preco").getAsString()));
-        produto.setQuantidadeEstoque(body.get("quantidadeEstoque").getAsInt());
-        produto.setAtivo(true);
-
-        produtoDAO.inserir(produto);
-
-        resp.setContentType("application/json");
-        resp.setStatus(HttpServletResponse.SC_CREATED);
-        resp.getWriter().write(gson.toJson(produto));
     }
 
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        String path = req.getPathInfo();
-        if (path == null || path.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        Integer id = idDaRota(req.getPathInfo());
+        if (id == null) {
+            Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, "Informe o id do produto na URL");
             return;
         }
 
-        int id = Integer.parseInt(path.substring(1));
         Produto produto = produtoDAO.obterPorId(id);
         if (produto == null) {
-            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            Resposta.erroNaoEncontrado(resp, "Produto nao encontrado");
             return;
         }
 
-        try (Reader reader = req.getReader()) {
-            JsonObject body = gson.fromJson(reader, JsonObject.class);
-            if (body.has("categoriaId")) produto.setCategoriaId(body.get("categoriaId").getAsInt());
-            if (body.has("nome")) produto.setNome(body.get("nome").getAsString());
-            if (body.has("descricao")) produto.setDescricao(body.get("descricao").getAsString());
-            if (body.has("preco")) produto.setPreco(new BigDecimal(body.get("preco").getAsString()));
-            if (body.has("quantidadeEstoque")) produto.setQuantidadeEstoque(body.get("quantidadeEstoque").getAsInt());
-            if (body.has("ativo")) produto.setAtivo(body.get("ativo").getAsBoolean());
-        }
+        try {
+            CorpoJson corpo = CorpoJson.ler(req);
+            if (corpo.tem("categoriaId")) {
+                produto.setCategoriaId(corpo.inteiroObrigatorio("categoriaId"));
+            }
+            if (corpo.tem("nome")) {
+                produto.setNome(corpo.textoObrigatorio("nome"));
+            }
+            if (corpo.tem("descricao")) {
+                produto.setDescricao(corpo.textoObrigatorio("descricao"));
+            }
+            if (corpo.tem("preco")) {
+                produto.setPreco(corpo.decimalObrigatorio("preco"));
+            }
+            if (corpo.tem("quantidadeEstoque")) {
+                produto.setQuantidadeEstoque(corpo.inteiroObrigatorio("quantidadeEstoque"));
+            }
+            if (corpo.tem("ativo")) {
+                produto.setAtivo(corpo.booleano("ativo", produto.isAtivo()));
+            }
 
-        produtoDAO.atualizar(produto);
-        resp.setContentType("application/json");
-        resp.getWriter().write(gson.toJson(produto));
+            String erro = validar(produto);
+            if (erro != null) {
+                Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, erro);
+                return;
+            }
+
+            produtoDAO.atualizar(produto);
+            Resposta.ok(resp, produto);
+
+        } catch (CorpoInvalidoException e) {
+            Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
+        }
     }
 
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        String path = req.getPathInfo();
-        if (path == null || path.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        Integer id = idDaRota(req.getPathInfo());
+        if (id == null) {
+            Resposta.erro(resp, HttpServletResponse.SC_BAD_REQUEST, "Informe o id do produto na URL");
             return;
         }
 
-        int id = Integer.parseInt(path.substring(1));
-        boolean removido = produtoDAO.remover(id);
-        resp.setStatus(removido ? HttpServletResponse.SC_NO_CONTENT : HttpServletResponse.SC_NOT_FOUND);
+        if (produtoDAO.remover(id)) {
+            resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        } else {
+            Resposta.erroNaoEncontrado(resp, "Produto nao encontrado");
+        }
+    }
+
+    /** Devolve a mensagem de erro, ou null se o produto estiver valido. */
+    private String validar(Produto produto) {
+        if (produto.getPreco() == null || produto.getPreco().signum() <= 0) {
+            return "O preco deve ser maior que zero";
+        }
+        if (produto.getQuantidadeEstoque() < 0) {
+            return "A quantidade em estoque nao pode ser negativa";
+        }
+        if (categoriaDAO.obterPorId(produto.getCategoriaId()) == null) {
+            return "Categoria inexistente: " + produto.getCategoriaId();
+        }
+        return null;
+    }
+
+    private Integer idDaRota(String path) {
+        if (path == null || path.length() < 2) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(path.substring(1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

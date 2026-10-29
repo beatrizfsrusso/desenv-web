@@ -51,6 +51,19 @@ public class EnderecoDAO {
         }
     }
 
+    /** Variante usada dentro da transacao de checkout, que precisa da mesma conexao. */
+    public Endereco obterPorId(Connection conn, int id) throws SQLException {
+        String sql = "SELECT id, usuario_id, cep, logradouro, numero, complemento, bairro, cidade, estado, principal " +
+                "FROM endereco WHERE id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? mapear(rs) : null;
+            }
+        }
+    }
+
     public Endereco inserir(Endereco endereco) {
         String sql = "INSERT INTO endereco (usuario_id, cep, logradouro, numero, complemento, bairro, cidade, " +
                 "estado, principal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";

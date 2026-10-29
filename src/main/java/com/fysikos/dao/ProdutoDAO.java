@@ -12,9 +12,19 @@ import java.util.List;
 
 public class ProdutoDAO {
 
+    /**
+     * A nota media e a contagem de avaliacoes vem da view produto_nota_media,
+     * que o schema do banco define. O LEFT JOIN garante que produto sem
+     * avaliacao nenhuma ainda apareca (com media null e contagem 0).
+     */
+    private static final String SELECT_BASE =
+            "SELECT p.id, p.categoria_id, p.nome, p.descricao, p.preco, p.quantidade_estoque, p.ativo, " +
+            "v.media_nota, v.total_avaliacoes " +
+            "FROM produto p LEFT JOIN produto_nota_media v ON v.produto_id = p.id";
+
     public List<Produto> obterTodos() {
         List<Produto> produtos = new ArrayList<>();
-        String sql = "SELECT id, categoria_id, nome, descricao, preco, quantidade_estoque, ativo FROM produto";
+        String sql = SELECT_BASE;
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
@@ -32,8 +42,7 @@ public class ProdutoDAO {
 
     public List<Produto> obterPorCategoria(int categoriaId) {
         List<Produto> produtos = new ArrayList<>();
-        String sql = "SELECT id, categoria_id, nome, descricao, preco, quantidade_estoque, ativo " +
-                "FROM produto WHERE categoria_id = ?";
+        String sql = SELECT_BASE + " WHERE p.categoria_id = ?";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -54,8 +63,7 @@ public class ProdutoDAO {
 
     public List<Produto> buscarPorNome(String termo) {
         List<Produto> produtos = new ArrayList<>();
-        String sql = "SELECT id, categoria_id, nome, descricao, preco, quantidade_estoque, ativo " +
-                "FROM produto WHERE nome ILIKE ?";
+        String sql = SELECT_BASE + " WHERE p.nome ILIKE ?";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -75,8 +83,7 @@ public class ProdutoDAO {
     }
 
     public Produto obterPorId(int id) {
-        String sql = "SELECT id, categoria_id, nome, descricao, preco, quantidade_estoque, ativo " +
-                "FROM produto WHERE id = ?";
+        String sql = SELECT_BASE + " WHERE p.id = ?";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -88,6 +95,37 @@ public class ProdutoDAO {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Erro ao obter produto", e);
+        }
+    }
+
+    /** Variante usada dentro da transacao de checkout, que precisa da mesma conexao. */
+    public Produto obterPorId(Connection conn, int id) throws SQLException {
+        String sql = SELECT_BASE + " WHERE p.id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? mapear(rs) : null;
+            }
+        }
+    }
+
+    /**
+     * Da baixa no estoque somente se houver saldo suficiente. A condicao no
+     * WHERE faz a checagem e o decremento na mesma instrucao, entao duas
+     * compras simultaneas nao conseguem levar o estoque a negativo.
+     *
+     * @return false se o estoque era insuficiente (nada foi alterado)
+     */
+    public boolean baixarEstoque(Connection conn, int produtoId, int quantidade) throws SQLException {
+        String sql = "UPDATE produto SET quantidade_estoque = quantidade_estoque - ? " +
+                "WHERE id = ? AND quantidade_estoque >= ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, quantidade);
+            stmt.setInt(2, produtoId);
+            stmt.setInt(3, quantidade);
+            return stmt.executeUpdate() > 0;
         }
     }
 
@@ -159,7 +197,10 @@ public class ProdutoDAO {
                 rs.getString("descricao"),
                 rs.getBigDecimal("preco"),
                 rs.getInt("quantidade_estoque"),
-                rs.getBoolean("ativo")
+                rs.getBoolean("ativo"),
+                // getBigDecimal devolve null quando a view nao tem linha para o produto
+                rs.getBigDecimal("media_nota"),
+                rs.getInt("total_avaliacoes")
         );
     }
 }

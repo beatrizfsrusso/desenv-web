@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+         version="6.0">
+
+  <display-name>Fysikos E-commerce API</display-name>
+
+  <!--
+    Nao definir metadata-complete="true" aqui: os servlets sao declarados com
+    @WebServlet e deixariam de ser encontrados.
+  -->
+
+  <filter>
+    <filter-name>cors</filter-name>
+    <filter-class>com.fysikos.filter.CorsFilter</filter-class>
+    <!-- Pode ser sobrescrito pela variavel de ambiente FRONTEND_ORIGIN. -->
+    <init-param>
+      <param-name>origens</param-name>
+      <param-value>http://localhost:5173,http://localhost:3000</param-value>
+    </init-param>
+  </filter>
+
+  <filter>
+    <filter-name>autenticacao</filter-name>
+    <filter-class>com.fysikos.filter.AutenticacaoFilter</filter-class>
+  </filter>
+
+  <!-- A ordem dos filter-mapping e a ordem de execucao: CORS primeiro, para
+       que ate as respostas 401 e 403 saiam com os cabecalhos corretos. -->
+  <filter-mapping>
+    <filter-name>cors</filter-name>
+    <url-pattern>/api/*</url-pattern>
+  </filter-mapping>
+
+  <filter-mapping>
+    <filter-name>autenticacao</filter-name>
+    <url-pattern>/api/*</url-pattern>
+  </filter-mapping>
+
+  <session-config>
+    <session-timeout>60</session-timeout>
+    <cookie-config>
+      <http-only>true</http-only>
+    </cookie-config>
+  </session-config>
+</web-app>

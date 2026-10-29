@@ -14,7 +14,7 @@ public class UsuarioDAO {
 
     public List<Usuario> obterTodos() {
         List<Usuario> usuarios = new ArrayList<>();
-        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador FROM usuario";
+        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador, ativo FROM usuario WHERE ativo = TRUE";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
@@ -31,7 +31,7 @@ public class UsuarioDAO {
     }
 
     public Usuario obterPorId(int id) {
-        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador FROM usuario WHERE id = ?";
+        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador, ativo FROM usuario WHERE id = ? AND ativo = TRUE";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -46,8 +46,14 @@ public class UsuarioDAO {
         }
     }
 
+    /**
+     * Busca pelo email, sem filtrar por {@code ativo} — de proposito. O login
+     * precisa encontrar a conta desativada para recusar o acesso, e o cadastro
+     * precisa encontrar a linha que ainda ocupa o email (a coluna e UNIQUE, entao
+     * deixar cadastrar de novo estouraria no banco).
+     */
     public Usuario obterPorEmail(String email) {
-        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador FROM usuario WHERE email = ?";
+        String sql = "SELECT id, nome, email, senha_hash, cpf, administrador, ativo FROM usuario WHERE email = ?";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -103,8 +109,34 @@ public class UsuarioDAO {
         }
     }
 
+    /**
+     * Troca a senha. Fica separado de {@link #atualizar} de proposito: aquele
+     * metodo cuida dos dados cadastrais e nunca toca em senha_hash.
+     */
+    public boolean atualizarSenha(int id, String senhaHash) {
+        String sql = "UPDATE usuario SET senha_hash = ? WHERE id = ?";
+
+        try (Connection conn = ConnectionFactory.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, senhaHash);
+            stmt.setInt(2, id);
+
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao atualizar a senha do usuario", e);
+        }
+    }
+
+    /**
+     * Desativa a conta em vez de apagar a linha. Apagar de verdade esbarraria nas
+     * foreign keys de carrinho, pedido, avaliacao e uso_cupom (nenhuma delas
+     * cascateia) e levaria junto o historico de pedidos do cliente.
+     *
+     * @return false se o usuario nao existe ou ja estava desativado.
+     */
     public boolean remover(int id) {
-        String sql = "DELETE FROM usuario WHERE id = ?";
+        String sql = "UPDATE usuario SET ativo = FALSE WHERE id = ? AND ativo = TRUE";
 
         try (Connection conn = ConnectionFactory.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -112,7 +144,7 @@ public class UsuarioDAO {
             stmt.setInt(1, id);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao remover usuario", e);
+            throw new RuntimeException("Erro ao desativar usuario", e);
         }
     }
 
@@ -123,7 +155,8 @@ public class UsuarioDAO {
                 rs.getString("email"),
                 rs.getString("senha_hash"),
                 rs.getString("cpf"),
-                rs.getBoolean("administrador")
+                rs.getBoolean("administrador"),
+                rs.getBoolean("ativo")
         );
     }
 }

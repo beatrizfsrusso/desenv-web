@@ -5,20 +5,28 @@ public class Usuario {
     private int id;
     private String nome;
     private String email;
-    private String senhaHash;
+    /** transient: o Gson nao serializa, entao o hash nunca sai numa resposta da API. */
+    private transient String senhaHash;
     private String cpf;
     private boolean administrador;
+    /**
+     * Exclusao de conta e logica, nao fisica: apagar a linha levaria junto o
+     * historico de pedidos do cliente (que a loja precisa manter). Conta com
+     * ativo = false nao loga e some das listagens.
+     */
+    private boolean ativo = true;
 
     public Usuario() {
     }
 
-    public Usuario(int id, String nome, String email, String senhaHash, String cpf, boolean administrador) {
+    public Usuario(int id, String nome, String email, String senhaHash, String cpf, boolean administrador, boolean ativo) {
         this.id = id;
         this.nome = nome;
         this.email = email;
         this.senhaHash = senhaHash;
         this.cpf = cpf;
         this.administrador = administrador;
+        this.ativo = ativo;
     }
 
     public int getId() {
@@ -67,5 +75,13 @@ public class Usuario {
 
     public void setAdministrador(boolean administrador) {
         this.administrador = administrador;
+    }
+
+    public boolean isAtivo() {
+        return ativo;
+    }
+
+    public void setAtivo(boolean ativo) {
+        this.ativo = ativo;
     }
 }

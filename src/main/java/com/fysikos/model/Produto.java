@@ -12,11 +12,19 @@ public class Produto {
     private int quantidadeEstoque;
     private boolean ativo;
 
+    /**
+     * Vem da view produto_nota_media, nao de coluna da tabela: e o que alimenta
+     * as estrelas e a contagem de avaliacoes na vitrine. notaMedia e null quando
+     * o produto ainda nao tem nenhuma avaliacao ativa.
+     */
+    private BigDecimal notaMedia;
+    private int totalAvaliacoes;
+
     public Produto() {
     }
 
     public Produto(int id, int categoriaId, String nome, String descricao, BigDecimal preco,
-                   int quantidadeEstoque, boolean ativo) {
+                   int quantidadeEstoque, boolean ativo, BigDecimal notaMedia, int totalAvaliacoes) {
         this.id = id;
         this.categoriaId = categoriaId;
         this.nome = nome;
@@ -24,6 +32,8 @@ public class Produto {
         this.preco = preco;
         this.quantidadeEstoque = quantidadeEstoque;
         this.ativo = ativo;
+        this.notaMedia = notaMedia;
+        this.totalAvaliacoes = totalAvaliacoes;
     }
 
     public int getId() {
@@ -80,5 +90,21 @@ public class Produto {
 
     public void setAtivo(boolean ativo) {
         this.ativo = ativo;
+    }
+
+    public BigDecimal getNotaMedia() {
+        return notaMedia;
+    }
+
+    public void setNotaMedia(BigDecimal notaMedia) {
+        this.notaMedia = notaMedia;
+    }
+
+    public int getTotalAvaliacoes() {
+        return totalAvaliacoes;
+    }
+
+    public void setTotalAvaliacoes(int totalAvaliacoes) {
+        this.totalAvaliacoes = totalAvaliacoes;
     }
 }

@@ -8,6 +8,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,6 +46,63 @@ public class CupomDAO {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Erro ao obter cupom por codigo", e);
+        }
+    }
+
+    public Cupom obterPorId(int id) {
+        String sql = "SELECT id, codigo, tipo_desconto, valor, validade, ativo FROM cupom WHERE id = ?";
+
+        try (Connection conn = ConnectionFactory.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, id);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? mapear(rs) : null;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao obter cupom", e);
+        }
+    }
+
+    /** Variante usada dentro da transacao de checkout, que precisa da mesma conexao. */
+    public Cupom obterPorCodigo(Connection conn, String codigo) throws SQLException {
+        String sql = "SELECT id, codigo, tipo_desconto, valor, validade, ativo FROM cupom WHERE codigo = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, codigo);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? mapear(rs) : null;
+            }
+        }
+    }
+
+    /**
+     * Um usuario so pode usar o mesmo cupom uma vez. A PK composta de uso_cupom
+     * ja impediria a duplicata, mas checar antes permite devolver um erro claro
+     * em vez de estourar uma violacao de constraint.
+     */
+    public boolean jaUsado(Connection conn, int cupomId, int usuarioId) throws SQLException {
+        String sql = "SELECT 1 FROM uso_cupom WHERE id_cupom = ? AND usuario_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, cupomId);
+            stmt.setInt(2, usuarioId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    public void registrarUso(Connection conn, int cupomId, int usuarioId, int pedidoId) throws SQLException {
+        String sql = "INSERT INTO uso_cupom (id_cupom, usuario_id, pedido_id, data_uso) VALUES (?, ?, ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, cupomId);
+            stmt.setInt(2, usuarioId);
+            stmt.setInt(3, pedidoId);
+            stmt.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
+            stmt.executeUpdate();
         }
     }
 
